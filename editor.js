@@ -14,11 +14,12 @@ const doorWidthInput = document.querySelector("#door-width");
 const animationSpeed = document.querySelector("#animation-speed");
 const animationSpeedValue = document.querySelector("#animation-speed-value");
 const overallDimensions = document.querySelector("#overall-dimensions");
+const peopleLayer = document.querySelector("#people-layer");
+const replayButton = document.querySelector("#replay-button");
+let currentAnimation = null;
+let animationTimer = null;
 
 const initialItems = [
-  { id: "stair-n", type: "stair", x1: 0, y1: -139, x2: 0, y2: -166 },
-  { id: "stair-se", type: "stair", x1: 98, y1: 98, x2: 119, y2: 119 },
-  { id: "stair-sw", type: "stair", x1: -98, y1: 98, x2: -119, y2: 119 },
   { id: "portal-n", type: "portal", x1: 0, y1: -139, x2: 0, y2: -139, width: 6 },
   { id: "portal-e", type: "portal", x1: 139, y1: 0, x2: 139, y2: 0, width: 6 },
   { id: "portal-s", type: "portal", x1: 0, y1: 139, x2: 0, y2: 139, width: 6 },
@@ -840,6 +841,12 @@ function runEvacuationModel() {
   const queues = new Map(items.filter((item) => item.type === "door").map((door) => [door.id, []]));
   const doorBudget = new Map(items.filter((item) => item.type === "door").map((door) => [door.id, 0]));
   let exitOrder = 0;
+  const remainingHistory = [{ time: 0, remaining: people.length }];
+  const animationFrames = [{
+    time: 0,
+    people: people.map((person) => ({ x: person.x, y: person.y, exited: false })),
+  }];
+  let lastFrameTime = 0;
 
   while (elapsed < maxTime && evacuated < people.length) {
     for (const door of items.filter((item) => item.type === "door")) {
@@ -906,10 +913,23 @@ function runEvacuationModel() {
     if (fiftyTime === null && evacuated >= fiftyCount) fiftyTime = elapsed + dt;
     if (ninetyTime === null && evacuated >= ninetyCount) ninetyTime = elapsed + dt;
     elapsed += dt;
+    if (elapsed - lastFrameTime >= 1) {
+      remainingHistory.push({ time: elapsed, remaining: people.length - evacuated });
+      animationFrames.push({
+        time: elapsed,
+        people: people.map((person) => ({ x: person.x, y: person.y, exited: person.exited })),
+      });
+      lastFrameTime = elapsed;
+    }
     for (const queue of queues.values()) largestQueue = Math.max(largestQueue, queue.length);
   }
 
   const largestExit = [...exitUsage.entries()].sort((a, b) => b[1] - a[1])[0];
+  remainingHistory.push({ time: evacuated === people.length ? elapsed : maxTime, remaining: people.length - evacuated });
+  animationFrames.push({
+    time: evacuated === people.length ? elapsed : maxTime,
+    people: people.map((person) => ({ x: person.x, y: person.y, exited: person.exited })),
+  });
   const result = {
     elapsed: evacuated === people.length ? elapsed : maxTime,
     evacuated,
@@ -919,13 +939,131 @@ function runEvacuationModel() {
     largestQueue,
     largestExit: largestExit ? largestExit[0] : null,
     timedOut: evacuated !== people.length,
+    remainingHistory,
+    animationFrames,
+    totalPeople: people.length,
   };
   readiness.textContent = result.timedOut ? "Model incomplete" : "Evacuation complete";
   readiness.classList.toggle("ready-pill-invalid", result.timedOut);
   return result;
 }
 
+function renderPeopleFrame(frame) {
+  if (!frame) return;
+  const visible = frame.people.filter((person) => !person.exited);
+  const dots = document.createDocumentFragment();
+  for (const person of visible) {
+    dots.append(makeSvg("circle", {
+      class: "person-dot",
+      cx: person.x,
+      cy: person.y,
+      r: "1.8",
+    }));
+  }
+  peopleLayer.replaceChildren(dots);
+}
+
+function stopAnimation() {
+  if (animationTimer !== null) {
+    window.clearInterval(animationTimer);
+    animationTimer = null;
+  }
+}
+
+function renderChart(result) {
+  const chartSvg = document.querySelector("#chart-svg");
+  const chartMessage = document.querySelector("#chart-message");
+  chartSvg.replaceChildren();
+  chartMessage.hidden = true;
+
+  const width = 400;
+  const height = 130;
+  const maxTime = Math.max(1, result.elapsed);
+  const points = result.remainingHistory.map((sample) =>
+    `${(sample.time / maxTime) * width},${height - (sample.remaining / result.totalPeople) * height}`
+  ).join(" ");
+  chartSvg.append(makeSvg("polyline", {
+    class: "chart-line",
+    points,
+  }));
+
+  for (const [label, time] of [["50%", result.fiftyTime], ["90%", result.ninetyTime]]) {
+    if (time === null) continue;
+    const remaining = result.remainingHistory.find((sample) => sample.time >= time)?.remaining;
+    if (remaining === undefined) continue;
+    chartSvg.append(makeSvg("circle", {
+      class: "chart-milestone",
+      cx: (time / maxTime) * width,
+      cy: height - (remaining / result.totalPeople) * height,
+      r: "4",
+      "aria-label": `${label} at ${(time / 60).toFixed(2)} minutes`,
+    }));
+  }
+
+  document.querySelector("#chart-max").textContent = String(result.totalPeople);
+  document.querySelector("#chart-mid").textContent = String(Math.round(result.totalPeople / 2));
+  document.querySelector("#chart-end").textContent = result.timedOut ? "—" : `${(result.elapsed / 60).toFixed(1)} min`;
+}
+
+function startAnimation(result) {
+  stopAnimation();
+  replayButton.disabled = result.timedOut || result.animationFrames.length === 0;
+  currentAnimation = result;
+  const frames = result.animationFrames;
+  const realDuration = result.elapsed * 1000;
+  const speed = Number(animationSpeed.value);
+  const duration = realDuration / speed;
+  const frameInterval = 50;
+  const start = performance.now();
+  document.querySelector(".action-hint").textContent = "Running";
+  readiness.textContent = "Running";
+  readiness.classList.remove("ready-pill-invalid");
+  readiness.classList.add("running-pill");
+
+  function update() {
+    const progress = Math.min(1, (performance.now() - start) / duration);
+    const targetTime = progress * result.elapsed;
+    let frame = frames[0];
+    for (const candidate of frames) {
+      if (candidate.time > targetTime) break;
+      frame = candidate;
+    }
+    renderPeopleFrame(frame);
+    const evacuated = frame ? frame.people.filter((person) => person.exited).length : 0;
+    const countText = document.querySelector(".results-top .panel-subtitle");
+    countText.textContent = `${evacuated} / ${result.totalPeople} people out`;
+    document.querySelector(".result-detail strong").textContent = `${targetTime.toFixed(0)} s`;
+
+    if (progress >= 1) {
+      stopAnimation();
+      renderPeopleFrame(frames[frames.length - 1]);
+      document.querySelector(".action-hint").textContent = "Complete";
+      readiness.textContent = "Evacuation complete";
+      document.querySelector(".results-top .panel-subtitle").textContent = `${result.totalPeople - result.evacuated} / ${result.totalPeople} people out`;
+    }
+  }
+
+  update();
+  animationTimer = window.setInterval(update, frameInterval);
+}
+
 function resetPlan() {
+  stopAnimation();
+  peopleLayer.replaceChildren();
+  replayButton.disabled = true;
+  currentAnimation = null;
+  document.querySelector(".action-hint").textContent = "Ready";
+  document.querySelector(".results-top .panel-subtitle").textContent = "— / — people out";
+  for (const value of document.querySelectorAll(".metric-value")) value.firstChild.textContent = "—";
+  const resultDetail = document.querySelector(".result-detail");
+  if (resultDetail) {
+    for (const strong of resultDetail.querySelectorAll("strong")) strong.textContent = "—";
+  }
+  document.querySelector("#chart-svg").replaceChildren();
+  document.querySelector("#chart-message").hidden = false;
+  document.querySelector("#chart-end").textContent = "—";
+  document.querySelector("#chart-max").textContent = "500";
+  document.querySelector("#chart-mid").textContent = "250";
   items = copyItems(initialItems);
   selectedId = null;
   drawState = null;
@@ -983,6 +1121,9 @@ document.querySelector("#snap-tool").addEventListener("click", (event) => {
 });
 document.querySelector("#advanced-toggle").addEventListener("click", toggleAdvanced);
 document.querySelector("#reset-button").addEventListener("click", resetPlan);
+replayButton.addEventListener("click", () => {
+  if (currentAnimation) startAnimation(currentAnimation);
+});
 function maxTimeLabel(seconds) {
   return `${Math.round(seconds)} s`;
 }
@@ -1006,6 +1147,8 @@ document.querySelector("#run-button").addEventListener("click", (event) => {
   document.querySelector("#editor-help").textContent = result.timedOut
     ? `Model timed out after ${maxTimeLabel(result.elapsed)}; ${result.evacuated} of ${peopleInput.value} people crossed an exterior exit.`
     : `Model complete: ${result.evacuated} people evacuated in ${totalMinutes.toFixed(2)} min. Largest queue: ${result.largestQueue}.`;
+  renderChart(result);
+  if (!result.timedOut) startAnimation(result);
 });
 document.querySelector("#placement").addEventListener("change", () => {
   if (placement.value === "region") {

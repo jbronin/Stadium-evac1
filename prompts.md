@@ -99,3 +99,8 @@
 - **Asked:** Fix problems with the HTML.
 - **Changed:** Removed a stray CSS declaration fragment that caused the HTML field-grid rule to fail parsing.
 - **Worked:** VS Code reports no HTML or JavaScript diagnostics.
+
+## 21
+- **Asked:** Run Stage 4 and remove the original three orange hall doors.
+- **Changed:** Removed the three default stair/door-style orange items, added people animation and replay controls, and connected evacuation milestones and the people-remain chart.
+- **Worked:** Browser verification showed the 500-person run, chart, live count, and replay control working.
