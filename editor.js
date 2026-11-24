@@ -466,7 +466,8 @@ function updateValidation() {
   validationMessage.textContent = errors.join(" ");
   readiness.textContent = errors.length ? "Needs attention" : "Layout valid";
   readiness.classList.toggle("ready-pill-invalid", errors.length > 0);
-  runButton.disabled = true;
+  runButton.disabled = errors.length > 0;
+  runButton.title = errors.length ? "Fix the layout validation errors before running." : "Run the evacuation model";
   updateFloorCaption();
   return errors.length === 0;
 }
@@ -648,6 +649,282 @@ function updateDoorWidth() {
   updateValidation();
 }
 
+function seededRandom(seed) {
+  let state = (Number(seed) >>> 0) || 1;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+}
+
+function buildRouteGrid() {
+  const step = 8;
+  const cells = [];
+  const byKey = new Map();
+  for (let x = -176; x <= 176; x += step) {
+    for (let y = -176; y <= 176; y += step) {
+      const point = { x, y };
+      if (!inWalkableArea(point) || isBlocked(point)) continue;
+      const key = `${x},${y}`;
+      const cell = { x, y, key };
+      cells.push(cell);
+      byKey.set(key, cell);
+    }
+  }
+  return { step, cells, byKey };
+}
+
+function nearestCell(point, grid) {
+  let nearest = null;
+  let nearestDistance = Infinity;
+  for (const cell of grid.cells) {
+    const distance = (cell.x - point.x) ** 2 + (cell.y - point.y) ** 2;
+    if (distance < nearestDistance) {
+      nearest = cell;
+      nearestDistance = distance;
+    }
+  }
+  return nearest;
+}
+
+function pointNearStairs(point) {
+  return items.some((item) => item.type === "stair" &&
+    distanceToSegment(point, { x: item.x1, y: item.y1 }, { x: item.x2, y: item.y2 }) < 10);
+}
+
+function findShortestRoute(start, goal, grid) {
+  const source = nearestCell(start, grid);
+  const target = nearestCell(goal, grid);
+  if (!source || !target) return null;
+  const open = new Map([[source.key, source]]);
+  const cameFrom = new Map();
+  const cost = new Map([[source.key, 0]]);
+  const estimate = (cell) => Math.hypot(cell.x - target.x, cell.y - target.y);
+  const priority = (cell) => (cost.get(cell.key) ?? Infinity) + estimate(cell);
+  const offsets = [
+    [-grid.step, 0], [grid.step, 0], [0, -grid.step], [0, grid.step],
+    [-grid.step, -grid.step], [-grid.step, grid.step], [grid.step, -grid.step], [grid.step, grid.step],
+  ];
+
+  while (open.size) {
+    let current = null;
+    let currentPriority = Infinity;
+    for (const cell of open.values()) {
+      const value = priority(cell);
+      if (value < currentPriority) {
+        current = cell;
+        currentPriority = value;
+      }
+    }
+    if (!current) break;
+    open.delete(current.key);
+    if (current.key === target.key) {
+      const route = [current];
+      while (cameFrom.has(current.key)) {
+        current = cameFrom.get(current.key);
+        route.push(current);
+      }
+      return route.reverse();
+    }
+    for (const [dx, dy] of offsets) {
+      const next = grid.byKey.get(`${current.x + dx},${current.y + dy}`);
+      if (!next) continue;
+      if (dx !== 0 && dy !== 0 &&
+        (isBlocked({ x: current.x + dx, y: current.y }) || isBlocked({ x: current.x, y: current.y + dy }))) continue;
+      const diagonal = dx !== 0 && dy !== 0;
+      const middle = { x: (current.x + next.x) / 2, y: (current.y + next.y) / 2 };
+      const baseDistance = diagonal ? grid.step * Math.SQRT2 : grid.step;
+      const terrainCost = pointNearStairs(middle) ? baseDistance / 0.75 : baseDistance;
+      const nextCost = (cost.get(current.key) ?? Infinity) + terrainCost;
+      if (nextCost < (cost.get(next.key) ?? Infinity)) {
+        cost.set(next.key, nextCost);
+        cameFrom.set(next.key, current);
+        open.set(next.key, next);
+      }
+    }
+  }
+  return null;
+}
+
+function createPeople(random) {
+  const count = Number(peopleInput.value);
+  const crowdRegions = items.filter((item) => item.type === "crowd");
+  const people = [];
+  let attempts = 0;
+  while (people.length < count && attempts < count * 100) {
+    attempts += 1;
+    let point;
+    if (placement.value === "region" && crowdRegions.length) {
+      const region = crowdRegions[crowdRegions.length - 1];
+      point = {
+        x: Math.min(region.x1, region.x2) + random() * Math.abs(region.x2 - region.x1),
+        y: Math.min(region.y1, region.y2) + random() * Math.abs(region.y2 - region.y1),
+      };
+    } else {
+      const angle = random() * Math.PI * 2;
+      const radius = 58 + Math.sqrt(random()) * (174 - 58);
+      point = { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
+    }
+    if (!inWalkableArea(point) || isBlocked(point)) continue;
+    people.push({ id: people.length, x: point.x, y: point.y, routeIndex: 0, route: null, exit: null, exited: false, queueOrder: null });
+  }
+  return people;
+}
+
+function localCrowdDensity(person, people) {
+  const radius = 16;
+  let nearby = 0;
+  for (const other of people) {
+    if (other.exited || other.id === person.id) continue;
+    if ((other.x - person.x) ** 2 + (other.y - person.y) ** 2 <= radius ** 2) nearby += 1;
+  }
+  return nearby / (Math.PI * radius * radius);
+}
+
+function assignRoutes(people, grid) {
+  const doors = items.filter((item) => item.type === "door");
+  for (const person of people) {
+    let bestRoute = null;
+    let bestExit = null;
+    let bestLength = Infinity;
+    for (const door of doors) {
+      const angle = Math.atan2(door.y1, door.x1);
+      const goal = { x: Math.cos(angle) * 168, y: Math.sin(angle) * 168 };
+      const route = findShortestRoute(person, goal, grid);
+      if (!route) continue;
+      let length = 0;
+      let previous = person;
+      for (const cell of route) {
+        length += Math.hypot(cell.x - previous.x, cell.y - previous.y);
+        previous = cell;
+      }
+      if (length < bestLength) {
+        bestLength = length;
+        bestRoute = route;
+        bestExit = door;
+      }
+    }
+    if (!bestRoute) return false;
+    person.route = bestRoute;
+    person.routeIndex = 0;
+    person.exit = bestExit;
+  }
+  return true;
+}
+
+function runEvacuationModel() {
+  if (!updateValidation()) return null;
+  const random = seededRandom(Number(document.querySelector("#seed").value));
+  const grid = buildRouteGrid();
+  const people = createPeople(random);
+  if (people.length !== Number(peopleInput.value) || !assignRoutes(people, grid)) {
+    validationMessage.hidden = false;
+    validationMessage.classList.add("invalid");
+    validationMessage.textContent = "The model could not place every person or assign a reachable exterior exit.";
+    readiness.textContent = "Needs attention";
+    readiness.classList.add("ready-pill-invalid");
+    return null;
+  }
+
+  const baseSpeed = Number(speedInput.value);
+  const dt = 0.25;
+  const maxTime = 3600;
+  const exitUsage = new Map(items.filter((item) => item.type === "door").map((door) => [door.id, 0]));
+  let elapsed = 0;
+  let evacuated = 0;
+  let largestQueue = 0;
+  const fiftyCount = Math.ceil(people.length * 0.5);
+  const ninetyCount = Math.ceil(people.length * 0.9);
+  let fiftyTime = null;
+  let ninetyTime = null;
+  const queues = new Map(items.filter((item) => item.type === "door").map((door) => [door.id, []]));
+  const doorBudget = new Map(items.filter((item) => item.type === "door").map((door) => [door.id, 0]));
+  let exitOrder = 0;
+
+  while (elapsed < maxTime && evacuated < people.length) {
+    for (const door of items.filter((item) => item.type === "door")) {
+      const queue = queues.get(door.id);
+      const nextBudget = (doorBudget.get(door.id) ?? 0) + (24 * door.width / 60) * dt;
+      let availableCrossings = Math.floor(nextBudget);
+      let remainingBudget = nextBudget - availableCrossings;
+      while (availableCrossings > 0 && queue.length) {
+        const person = queue.shift();
+        person.exited = true;
+        evacuated += 1;
+        availableCrossings -= 1;
+        exitUsage.set(door.id, (exitUsage.get(door.id) ?? 0) + 1);
+      }
+      remainingBudget = nextBudget - (Math.floor(nextBudget) - availableCrossings);
+      doorBudget.set(door.id, remainingBudget);
+    }
+
+    for (const person of people) {
+      if (person.exited) continue;
+      const angle = Math.atan2(person.exit.y1, person.exit.x1);
+      const boundaryPoint = { x: Math.cos(angle) * 184, y: Math.sin(angle) * 184 };
+      if (Math.hypot(person.x - boundaryPoint.x, person.y - boundaryPoint.y) <= 4) {
+        const queue = queues.get(person.exit.id);
+        if (!queue.includes(person)) {
+          person.queueOrder = ++exitOrder;
+          queue.push(person);
+        }
+        continue;
+      }
+
+      while (person.routeIndex < person.route.length &&
+        Math.hypot(person.route[person.routeIndex].x - person.x, person.route[person.routeIndex].y - person.y) < 2) {
+        person.routeIndex += 1;
+      }
+      let target;
+      if (person.routeIndex < person.route.length) {
+        target = person.route[person.routeIndex];
+      } else {
+        target = boundaryPoint;
+      }
+
+      const dx = target.x - person.x;
+      const dy = target.y - person.y;
+      const distance = Math.hypot(dx, dy);
+      if (distance <= 0.001) continue;
+
+      const density = localCrowdDensity(person, people);
+      const densityLimit = 0.2;
+      const crowdFactor = Math.max(0, 1 - density / densityLimit);
+      const speed = baseSpeed * crowdFactor * (pointNearStairs(person) ? 0.75 : 1);
+      if (speed <= 0.001) continue;
+
+      const nextX = person.x + (dx / distance) * Math.min(speed * dt, distance);
+      const nextY = person.y + (dy / distance) * Math.min(speed * dt, distance);
+      const blockedByPerson = people.some((other) => !other.exited && other.id !== person.id &&
+        (other.x - nextX) ** 2 + (other.y - nextY) ** 2 < 0.1 ** 2);
+      if (!blockedByPerson) {
+        person.x = nextX;
+        person.y = nextY;
+      }
+    }
+
+    if (fiftyTime === null && evacuated >= fiftyCount) fiftyTime = elapsed + dt;
+    if (ninetyTime === null && evacuated >= ninetyCount) ninetyTime = elapsed + dt;
+    elapsed += dt;
+    for (const queue of queues.values()) largestQueue = Math.max(largestQueue, queue.length);
+  }
+
+  const largestExit = [...exitUsage.entries()].sort((a, b) => b[1] - a[1])[0];
+  const result = {
+    elapsed: evacuated === people.length ? elapsed : maxTime,
+    evacuated,
+    fiftyTime,
+    ninetyTime,
+    exitUsage: Object.fromEntries(exitUsage),
+    largestQueue,
+    largestExit: largestExit ? largestExit[0] : null,
+    timedOut: evacuated !== people.length,
+  };
+  readiness.textContent = result.timedOut ? "Model incomplete" : "Evacuation complete";
+  readiness.classList.toggle("ready-pill-invalid", result.timedOut);
+  return result;
+}
+
 function resetPlan() {
   items = copyItems(initialItems);
   selectedId = null;
@@ -706,7 +983,30 @@ document.querySelector("#snap-tool").addEventListener("click", (event) => {
 });
 document.querySelector("#advanced-toggle").addEventListener("click", toggleAdvanced);
 document.querySelector("#reset-button").addEventListener("click", resetPlan);
-document.querySelector("#run-button").addEventListener("click", (event) => event.preventDefault());
+function maxTimeLabel(seconds) {
+  return `${Math.round(seconds)} s`;
+}
+
+document.querySelector("#run-button").addEventListener("click", (event) => {
+  event.preventDefault();
+  const result = runEvacuationModel();
+  if (!result) return;
+  const totalMinutes = result.elapsed / 60;
+  const metricValues = [...document.querySelectorAll(".metric-value")];
+  if (metricValues[0]) metricValues[0].firstChild.textContent = result.timedOut ? "—" : totalMinutes.toFixed(2);
+  if (metricValues[1]) metricValues[1].firstChild.textContent = result.fiftyTime === null ? "—" : (result.fiftyTime / 60).toFixed(2);
+  if (metricValues[2]) metricValues[2].firstChild.textContent = result.ninetyTime === null ? "—" : (result.ninetyTime / 60).toFixed(2);
+  const resultDetail = document.querySelector(".result-detail");
+  if (resultDetail) {
+    const strongs = resultDetail.querySelectorAll("strong");
+    strongs[0].textContent = result.timedOut ? "Incomplete" : `${result.elapsed.toFixed(0)} s`;
+    strongs[1].textContent = [...Object.entries(result.exitUsage)].map(([id, count]) => `${count}`).join(" / ");
+    strongs[2].textContent = `${result.largestQueue} people`;
+  }
+  document.querySelector("#editor-help").textContent = result.timedOut
+    ? `Model timed out after ${maxTimeLabel(result.elapsed)}; ${result.evacuated} of ${peopleInput.value} people crossed an exterior exit.`
+    : `Model complete: ${result.evacuated} people evacuated in ${totalMinutes.toFixed(2)} min. Largest queue: ${result.largestQueue}.`;
+});
 document.querySelector("#placement").addEventListener("change", () => {
   if (placement.value === "region") {
     setTool("crowd");

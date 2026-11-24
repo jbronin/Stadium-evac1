@@ -89,3 +89,13 @@
 - **Asked:** Provide the questions I need to answer before Stage 3.
 - **Changed:** Asked for the density-speed rule, yielding trigger, and exit reassignment behavior; received the user's selections.
 - **Worked:** Yes.
+
+## 19
+- **Asked:** Run Stage 3 from the build stages.
+- **Changed:** Implemented deterministic crowd placement, reachable shortest-path routing, stair-speed travel, linear crowd-speed reduction, yielding at close movement points, FIFO exit queues, and width-based door flow capacity. Wired Run to calculate evacuation milestones and basic result totals.
+- **Worked:** Verified the default 500-person scenario completes with deterministic 50% and 90% milestones and exit usage.
+
+## 20
+- **Asked:** Fix problems with the HTML.
+- **Changed:** Removed a stray CSS declaration fragment that caused the HTML field-grid rule to fail parsing.
+- **Worked:** VS Code reports no HTML or JavaScript diagnostics.
