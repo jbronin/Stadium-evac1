@@ -166,6 +166,10 @@
         color: var(--blue);
       }
 
+      .tool:disabled { opacity: .42; cursor: not-allowed; }
+      .ready-pill.ready-pill-invalid { background: #fff0ef; color: #9c3935; }
+      .ready-pill.ready-pill-invalid::before { background: #cf625d; }
+
       .tool-separator { width: 26px; height: 1px; margin: 5px 0; background: var(--line); }
 
       .canvas {
@@ -182,7 +186,7 @@
 
       .plan-wrap { width: min(100%, 590px); }
 
-      .plan { display: block; width: 100%; height: auto; overflow: visible; }
+      .plan { display: block; width: 100%; height: auto; overflow: visible; touch-action: none; user-select: none; }
 
       .plan-label {
         fill: #516171;
@@ -198,6 +202,15 @@
         font-weight: 600;
         letter-spacing: .04em;
       }
+
+      .plan-object { cursor: grab; }
+      .plan-object:active { cursor: grabbing; }
+      .plan-object.selected { filter: drop-shadow(0 0 3px #1769aa); }
+      .plan-object.selected > * { stroke: #1769aa; }
+      .plan-object text { fill: #285d7e; stroke: none; font-family: inherit; font-size: 8px; font-weight: 750; pointer-events: none; }
+      .draw-preview { pointer-events: none; opacity: .65; }
+      .plan.is-drawing { cursor: crosshair; }
+      .plan.is-panning { cursor: grabbing; }
 
       .door-label {
         fill: #14674f;
@@ -220,8 +233,36 @@
 
       .legend-dot { width: 9px; height: 9px; border-radius: 3px; background: #d5e5f1; }
       .legend-dot.stair { background: #edcc86; }
+      .legend-dot.portal { background: #628eaa; }
       .legend-dot.door { background: #5da68b; }
       .legend-dot.occupants { border-radius: 50%; background: #477ca4; }
+
+      .dimension-notes {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        border-top: 1px solid #edf0f3;
+        padding: 10px 17px;
+        color: #64727e;
+        font-size: 10px;
+      }
+
+      .dimension-notes span {
+        border: 1px solid #e8edf1;
+        border-radius: 999px;
+        padding: 5px 8px;
+        background: #fbfcfd;
+      }
+
+      .editor-help {
+        min-height: 34px;
+        margin: 0;
+        border-top: 1px solid #edf0f3;
+        padding: 10px 17px;
+        color: #677582;
+        font-size: 11px;
+        line-height: 1.4;
+      }
 
       .actions {
         display: flex;
@@ -247,6 +288,7 @@
       }
 
       .primary-button:hover { background: var(--blue-dark); }
+      .primary-button:disabled { background: #8ca4b4; cursor: not-allowed; box-shadow: none; }
 
       .actions .quiet-button { min-height: 44px; }
 
@@ -283,6 +325,7 @@
       }
 
       .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 12px; }
+      overflow: hidden; grid-template-columns: 1fr 1fr; gap: 14px 12px; }
 
       .field { min-width: 0; }
 
@@ -294,6 +337,8 @@
         font-weight: 700;
       }
 
+      .field-range { width: 100%; margin: 8px 0 0; accent-color: var(--blue); }
+
       .input-shell {
         display: flex;
         height: 40px;
@@ -302,6 +347,9 @@
         border-radius: 8px;
         background: white;
       }
+
+      .input-shell:has([aria-invalid="true"]) { border-color: #cf625d; }
+      input[aria-invalid="true"] { outline: 1px solid #cf625d; outline-offset: -2px; }
 
       .input-shell input, .input-shell select {
         width: 100%;
@@ -344,6 +392,32 @@
         font-size: 11px;
         font-weight: 700;
       }
+
+      .advanced-fields {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px 12px;
+        margin-top: 14px;
+        border-top: 1px solid #edf0f3;
+        padding-top: 14px;
+      }
+
+      .advanced-fields[hidden], .validation-message[hidden] { display: none; }
+      .range-shell { display: block; padding: 0 10px; }
+      .range-shell input { padding: 0; accent-color: var(--blue); }
+
+      .validation-message {
+        margin: 13px 0 0;
+        border-radius: 8px;
+        padding: 9px 10px;
+        background: #fff6e8;
+        color: #795116;
+        font-size: 11px;
+        line-height: 1.4;
+      }
+
+      .validation-message.invalid { background: #fff0ef; color: #9c3935; }
+      [aria-invalid="true"] { border-color: #cf625d !important; }
 
       .results { padding: 17px 18px 18px; }
 
@@ -523,6 +597,8 @@
         .tool { width: 38px; height: 38px; flex: 0 0 auto; }
         .tool-separator { width: 1px; height: 24px; flex: 0 0 auto; margin: 0 3px; }
         .canvas { min-height: 300px; padding: 6px 8px; }
+        .dimension-notes { padding: 9px 12px; }
+        .editor-help { padding: 9px 12px; }
         .panel-head { min-height: 54px; padding: 12px 14px; }
         .panel-title { font-size: 13px; }
         .panel-subtitle { font-size: 11px; }
@@ -530,6 +606,7 @@
         .action-hint { font-size: 10px; }
         .scenario { padding: 15px; }
         .field-grid { gap: 12px 10px; }
+        .advanced-fields { gap: 12px 10px; }
         .results { padding: 15px; }
         .chart-placeholder { padding-right: 13px; padding-left: 13px; }
         .chart { height: 158px; }
@@ -568,31 +645,34 @@
             <header class="panel-head">
               <div>
                 <h2 class="panel-title" id="floor-title">Floor plan</h2>
-                <p class="panel-subtitle">Validation scenario · 1 exterior door · 6 ft wide</p>
+                <p class="panel-subtitle">4 bowl-to-hall doors · 3 exterior exits</p>
               </div>
-              <button class="quiet-button" type="button" aria-label="Zoom to fit">⌕&nbsp; Fit</button>
+              <button class="quiet-button" id="fit-view" type="button" aria-label="Zoom to fit">⌕&nbsp; Fit</button>
             </header>
             <div class="canvas-area">
               <nav class="toolbar" aria-label="Floor plan tools">
-                <button class="tool" type="button" aria-label="Select and move" aria-pressed="true">↖</button>
-                <button class="tool" type="button" aria-label="Draw wall" aria-pressed="false">╱</button>
-                <button class="tool" type="button" aria-label="Add exterior door" aria-pressed="false">⇥</button>
-                <button class="tool" type="button" aria-label="Add stair aisle" aria-pressed="false">▤</button>
-                <button class="tool" type="button" aria-label="Add obstacle" aria-pressed="false">▧</button>
-                <button class="tool" type="button" aria-label="Draw crowd region" aria-pressed="false">◌</button>
+                <button class="tool" type="button" data-tool="select" aria-label="Select and move" aria-pressed="true">↖</button>
+                <button class="tool" type="button" data-tool="wall" aria-label="Draw wall" aria-pressed="false">╱</button>
+                <button class="tool" type="button" data-tool="portal" aria-label="Add bowl-to-hallway door" aria-pressed="false">↦</button>
+                <button class="tool" type="button" data-tool="door" aria-label="Add exterior exit" aria-pressed="false">⇥</button>
+                <button class="tool" type="button" data-tool="stair" aria-label="Add stair aisle" aria-pressed="false">▤</button>
+                <button class="tool" type="button" data-tool="obstacle" aria-label="Add obstacle" aria-pressed="false">▧</button>
+                <button class="tool" type="button" data-tool="crowd" aria-label="Draw crowd region" aria-pressed="false">◌</button>
                 <span class="tool-separator" aria-hidden="true"></span>
-                <button class="tool" type="button" aria-label="Erase or delete">⌫</button>
-                <button class="tool" type="button" aria-label="Undo">↶</button>
-                <button class="tool" type="button" aria-label="Redo">↷</button>
+                <button class="tool" id="delete-tool" type="button" aria-label="Delete selected item">⌫</button>
+                <button class="tool" id="undo-tool" type="button" aria-label="Undo" disabled>↶</button>
+                <button class="tool" id="redo-tool" type="button" aria-label="Redo" disabled>↷</button>
                 <span class="tool-separator" aria-hidden="true"></span>
-                <button class="tool" type="button" aria-label="Pan">✥</button>
-                <button class="tool" type="button" aria-label="Zoom in">＋</button>
+                <button class="tool" type="button" data-tool="pan" aria-label="Pan">✥</button>
+                <button class="tool" id="zoom-in" type="button" aria-label="Zoom in">＋</button>
+                <button class="tool" id="zoom-out" type="button" aria-label="Zoom out">−</button>
+                <button class="tool" id="snap-tool" type="button" aria-label="Toggle grid snapping" aria-pressed="true">#</button>
               </nav>
               <div class="canvas">
                 <div class="plan-wrap">
-                  <svg class="plan" viewBox="0 0 560 460" role="img" aria-labelledby="plan-title plan-desc">
+                  <svg class="plan" id="plan" viewBox="0 0 560 460" role="img" aria-labelledby="plan-title plan-desc">
                     <title id="plan-title">Simplified Madison Square Garden floor plan</title>
-                    <desc id="plan-desc">An illustrative circular concourse surrounds pie-shaped seating wedges. Stair aisles connect the seating to three exterior doors.</desc>
+                    <desc id="plan-desc">An approximate circular concourse surrounds pie-shaped seating wedges. Four evenly spaced doors connect the seating to the hallway. Three exterior exits are on the top, bottom, and left sides. Use the editor to adjust walls, doors, stair aisles, obstacles, and crowd regions.</desc>
                     <defs>
                       <pattern id="seats" width="7" height="7" patternUnits="userSpaceOnUse">
                         <circle cx="2" cy="2" r="1.1" fill="#a9c5d8" />
@@ -600,7 +680,7 @@
                     </defs>
                     <g transform="translate(280 225)">
                       <circle r="184" fill="#f3f7fa" stroke="#90a5b4" stroke-width="2" />
-                      <circle r="168" fill="none" stroke="#cfdae2" stroke-width="1" stroke-dasharray="3 5" />
+                      <circle r="175" fill="none" stroke="#cfdae2" stroke-width="1" stroke-dasharray="3 5" />
                       <circle r="151" fill="#eaf2f7" stroke="#9bb2c2" stroke-width="2" />
                       <circle r="139" fill="url(#seats)" stroke="#d3e2ec" stroke-width="1" />
                       <path d="M0 0 L0 -139 A139 139 0 0 1 98.3 -98.3 Z" fill="#d9e8f2" stroke="#fff" stroke-width="2" />
@@ -618,17 +698,6 @@
                       <text class="plan-label" x="117" y="5" text-anchor="middle">Seating</text>
                       <text class="plan-label" x="-112" y="5" text-anchor="middle">Seating</text>
 
-                      <g stroke="#c58e36" stroke-width="7" stroke-linecap="round">
-                        <path d="M0 -139 L0 -166" />
-                        <path d="M98 98 L119 119" />
-                        <path d="M-98 98 L-119 119" />
-                      </g>
-                      <g stroke="#f8e9c9" stroke-width="1.5">
-                        <path d="M-5 -145 L5 -145 M-5 -152 L5 -152 M-5 -159 L5 -159" />
-                        <path d="M102 102 L109 96 M107 107 L114 101 M112 112 L119 106" />
-                        <path d="M-102 102 L-96 109 M-107 107 L-101 114 M-112 112 L-106 119" />
-                      </g>
-
                       <path d="M-83 -83 A117 117 0 0 1 83 -83" fill="none" stroke="#6b91a8" stroke-width="2" stroke-dasharray="5 5" />
                       <path d="M-83 83 A117 117 0 0 0 83 83" fill="none" stroke="#6b91a8" stroke-width="2" stroke-dasharray="5 5" />
                       <text class="plan-small" x="0" y="-174" text-anchor="middle">CIRCULAR CONCOURSE</text>
@@ -644,15 +713,13 @@
                         <circle cx="-49" cy="-67" r="4" />
                       </g>
 
-                      <circle cx="0" cy="178" r="7" fill="#fff" stroke="#3b8b6c" stroke-width="3" />
-                      <g class="door-label">
-                        <text x="0" y="199" text-anchor="middle">6 FT EXTERIOR DOOR</text>
-                      </g>
+                      <g id="editable-layer"></g>
+                      <g id="draw-preview" class="draw-preview"></g>
                     </g>
                     <g class="plan-small">
                       <text x="280" y="28" text-anchor="middle">N</text>
                       <path d="M280 35 L280 48" stroke="#81909c" stroke-width="1.5" />
-                      <text x="280" y="443" text-anchor="middle">Approximate model · not to scale</text>
+                      <text x="280" y="443" text-anchor="middle">Approximate floor plan · not to scale</text>
                     </g>
                   </svg>
                 </div>
@@ -661,9 +728,18 @@
             <div class="legend" aria-label="Floor plan legend">
               <span class="legend-item"><span class="legend-dot"></span>Seating / concourse</span>
               <span class="legend-item"><span class="legend-dot stair"></span>Stair aisle</span>
+              <span class="legend-item"><span class="legend-dot portal"></span>Bowl-to-hall door</span>
               <span class="legend-item"><span class="legend-dot door"></span>Exterior door</span>
               <span class="legend-item"><span class="legend-dot occupants"></span>People preview</span>
             </div>
+            <div class="dimension-notes" aria-label="Approximate Madison Square Garden dimensions">
+              <span>Exterior diameter ≈ 425 ft</span>
+              <span>Structural roof diameter ≈ 404 ft</span>
+              <span>Concourse width ≈ 40 ft</span>
+              <span id="overall-dimensions">Floor plan: 425 × 425 ft</span>
+              <span>Model estimates, not measured layout</span>
+            </div>
+            <p class="editor-help" id="editor-help" aria-live="polite">Select an editor tool, then draw or place an item on the floor plan. Touch and mouse input are supported.</p>
           </section>
 
           <section class="panel chart-panel" aria-labelledby="chart-title">
@@ -700,33 +776,54 @@
               <div class="field-grid">
                 <div class="field">
                   <label for="people">People</label>
-                  <div class="input-shell"><input id="people" type="number" value="500" min="100" max="2000"><span class="unit">people</span></div>
+                  <div class="input-shell"><input id="people" type="number" value="500" min="100" max="2000" step="1"><span class="unit">people</span></div>
+                  <input class="field-range" id="people-slider" type="range" value="500" min="100" max="2000" step="1" aria-label="Number of people">
                 </div>
                 <div class="field">
                   <label for="speed">Average walking speed</label>
                   <div class="input-shell"><input id="speed" type="number" value="4" min="1" max="8" step="0.1"><span class="unit">ft/s</span></div>
+                  <input class="field-range" id="speed-slider" type="range" value="4" min="1" max="8" step="0.1" aria-label="Average walking speed">
                 </div>
                 <div class="field">
                   <label for="placement">Crowd placement</label>
-                  <div class="input-shell"><select id="placement"><option>Random</option><option>Draw a region</option></select></div>
+                  <div class="input-shell"><select id="placement"><option value="random">Random</option><option value="region">Draw a region</option></select></div>
                 </div>
                 <div class="field">
-                  <label for="door-width">Exterior door width</label>
+                  <label for="door-width">Selected / new doorway width</label>
                   <div class="input-shell"><input id="door-width" type="number" value="6" min="1" max="20" step="0.5"><span class="unit">ft</span></div>
                 </div>
               </div>
+              <div class="advanced-fields" id="advanced-fields" hidden>
+                <div class="field">
+                  <label for="plan-width">Floor-plan width</label>
+                  <div class="input-shell"><input id="plan-width" type="number" value="425" min="20" max="500" step="1"><span class="unit">ft</span></div>
+                </div>
+                <div class="field">
+                  <label for="plan-length">Floor-plan length</label>
+                  <div class="input-shell"><input id="plan-length" type="number" value="425" min="20" max="500" step="1"><span class="unit">ft</span></div>
+                </div>
+                <div class="field">
+                  <label for="seed">Random seed</label>
+                  <div class="input-shell"><input id="seed" type="number" value="1" min="0" max="2147483647" step="1"><span class="unit">integer</span></div>
+                </div>
+                <div class="field">
+                  <label for="animation-speed">Animation speed</label>
+                  <div class="input-shell range-shell"><input id="animation-speed" type="range" value="1" min="0.25" max="8" step="0.25" aria-label="Animation speed"><span class="unit"><output id="animation-speed-value">1×</output></span></div>
+                </div>
+              </div>
+              <p class="validation-message" id="validation-message" role="status" aria-live="polite" hidden></p>
               <div class="scenario-foot">
-                <span>Default validation scenario</span>
-                <button class="text-button" type="button">Advanced inputs&nbsp; ↗</button>
+                <span>Default MSG layout</span>
+                <button class="text-button" id="advanced-toggle" type="button" aria-expanded="false" aria-controls="advanced-fields">Advanced inputs&nbsp; ↗</button>
               </div>
             </div>
           </section>
 
           <section class="panel action-panel" aria-label="Simulation actions">
             <div class="actions">
-              <button class="primary-button" type="button">▶&nbsp; Run evacuation</button>
-              <button class="quiet-button" type="button">↻&nbsp; Reset</button>
-              <span class="action-hint">Results are estimates</span>
+              <button class="primary-button" id="run-button" type="button" disabled title="Simulation will be implemented in Stage 3">▶&nbsp; Run evacuation</button>
+              <button class="quiet-button" id="reset-button" type="button">↻&nbsp; Reset</button>
+              <span class="action-hint">Simulation is Stage 3</span>
             </div>
           </section>
 
@@ -768,5 +865,6 @@
         </section>
       </div>
     </main>
+    <script src="./editor.js" defer></script>
   </body>
 </html>

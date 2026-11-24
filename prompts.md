@@ -62,10 +62,30 @@
 
 ## 13
 - **Asked:** Build only Stage 1 from the build stages and commit with "stage 1" as the title.
-- **Changed:** Added a static responsive page-layout mockup for the simplified evacuation app; no simulation logic or later-stage functionality was added. The commit is pending.
+- **Changed:** Added a static responsive page-layout mockup for the simplified evacuation app and committed it as "stage 1"; no simulation logic was added.
 - **Worked:** Yes.
 
 ## 14
 - **Asked:** Add the overview to the top of spec.md and add the stages at the end under "## Build stages".
 - **Changed:** Added a concise app overview and a five-stage build plan with checks to spec.md and logged this request.
+- **Worked:** Yes.
+
+## 15
+- **Asked:** Build Stage 2 only, following the Stage 2 definition in spec.md, and commit it as "stage 2".
+- **Changed:** Added a responsive floor-plan editor, scenario controls, and approximate layout validation; simulation behavior remains out of scope.
+- **Worked:** Yes.
+
+## 16
+- **Asked:** Change the layout to four evenly spaced doors into the hallway and only three exterior doors, on the top, bottom, and left sides.
+- **Changed:** Updated the specification and default MSG layout to show four evenly spaced bowl-to-hallway doors and three double-door exterior exits on the top, bottom, and left sides.
+- **Worked:** Yes.
+
+## 17
+- **Asked:** Run Stage 3 from the build stages.
+- **Changed:** Logged the request and received the required modeling choices: linear crowd slowdown to zero, pause on a blocked next movement step until clear, and keep the nearest reachable exit selected at the start.
+- **Worked:** Stage 3 implementation is next.
+
+## 18
+- **Asked:** Provide the questions I need to answer before Stage 3.
+- **Changed:** Asked for the density-speed rule, yielding trigger, and exit reassignment behavior; received the user's selections.
 - **Worked:** Yes.
