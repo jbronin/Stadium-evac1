@@ -17,18 +17,20 @@ Floor plan editor (walls, exits with widths, obstacles such as seat rows), numbe
 # Calculations
 Each person walks toward the fastest exit, generally the nearest door, at the average walking speed. A person pauses when they need to let someone pass. People slow down and queue when it is crowded. Door flow is limited to about 24 people/min per foot of door width (SFPE Handbook).
 
-Person routes use the shortest clear path around walls and obstacles. Crowd slowing uses local crowd density to reduce walking speed continuously. Queuing is first-in, first-out with a door capacity of 24 people/min per foot of door width.
+Person routes use the shortest clear path around walls, obstacles, and stair aisles. Crowd slowing uses local crowd density to reduce walking speed continuously. Queuing is first-in, first-out with a door capacity of 24 people/min per foot of door width.
+
+Walking speed on stair aisles is three-quarters of the average level-ground walking speed.
 
 # Madison Square Garden layout
 Use a simplified representative layout based on Madison Square Garden:
 
 - Bowl shape: approximately 425 ft across for the circular exterior, with a radius of approximately 212.5 ft, and approximately 404 ft across for the structural roof, with a radius of approximately 202 ft.
-- Seating sections: pie-shaped sections around the bowl, using the following tier section counts: 100 level, sections 101–120, 20 sections; 200 level, sections 201–227, 27 sections; 300 level, sections 301–328, 28 sections; 400 level, sections 413–420, 8 sections.
-- Concourse: a circular hall around the seating bowl. Estimate the lower and upper concourse clear width at 40 ft, with seating portal offsets of approximately 20 ft and concourse-to-exit distances of approximately 100 ft.
+- Seating sections: pie-shaped seating wedges arranged around the bowl, without separate seating tiers.
+- Stairs: add stair aisles between the seating wedges, leading upward from the seating area toward the circular concourse and its exterior doors.
+- Concourse: a single circular hall around the seating bowl. Estimate its clear width at 40 ft, with seating portal offsets of approximately 20 ft and concourse-to-exit distances of approximately 100 ft.
 - Exits: place doors on three sides of the circular hall and treat each exterior public exit as a 6 ft-wide double door.
-- Vertical access: for the simplified layout, place representative escalator or elevator towers near the north, east, south, and west concourse approaches and use 6 ft-wide access openings.
-- The simplified seating section counts represent section numbers, not seat counts.
 - All layout measurements beyond the 425 ft exterior and 404 ft roof widths are modeling assumptions and should be labeled approximate.
+- Stair aisles are represented as walkable routes toward the concourse; their walking speed uses the stair-speed rule in Calculations.
 
 # Outputs
 Animation, total evacuation time, time to 50% and 90% out, plot of people remaining vs. time. A person is out when they leave the building by exiting through an exterior door.
@@ -50,10 +52,10 @@ On a phone, show the floor-plan canvas at the top, the editor toolbar above or b
 
 When the app first opens, show a ready floor-plan canvas with a default 500-person, one 6 ft exterior-door validation scenario, the proposed average walking speed, results as em dashes until Run is pressed, and a prominent Run evacuation button. Indicate that the displayed floor plan is a model, not an approved life-safety layout.
 
-Floor-plan editor tools: select/move, wall, exterior door, interior obstacle, crowd placement region, erase/delete, undo, redo, pan, zoom, and grid snapping.
+Floor-plan editor tools: select/move, wall, exterior door, stair aisle, interior obstacle, crowd placement region, erase/delete, undo, redo, pan, zoom, and grid snapping.
 
 # Validation
 500 people, one 6 ft door. Max flow = 24 × 6 = 144 people/min, so 500/144 ≈ 3.47 min ≈ 208 s. The app should be close
 
 # Out of scope
-Fire or smoke spread, stairs, panic behavior, multi-floor buildings.
+Fire or smoke spread, panic behavior, multi-floor buildings.

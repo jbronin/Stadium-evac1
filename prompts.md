@@ -39,3 +39,23 @@
 - **Asked:** Update spec.md with the agreed inputs, calculations, outputs, initial layout, phone layout, floor-plan editor decisions, and a simplified Madison Square Garden layout without TBD values.
 - **Changed:** Expanded spec.md with the agreed controls and output definitions, added an approximate MSG layout using the supplied exterior and roof dimensions and best-estimate concourse, tower, and exit dimensions, and replaced TBD measurements with modeling assumptions.
 - **Worked:** Yes.
+
+## 9
+- **Asked:** Read spec.md, write a short whole-app overview, suggest a 4–6-stage build plan starting with a page-layout mockup, and define what to check after each stage. Do not write code.
+- **Changed:** Reviewed spec.md and recorded this request in prompts.md; did not write code or change the specification.
+- **Worked:** Yes.
+
+## 10
+- **Asked:** Remove the seating tiers and towers and add stairs between the pie-shaped seating sections that go up toward the doors.
+- **Changed:** Removed the tier and tower assumptions from the MSG layout, added stair aisles between seating wedges leading to the concourse and exterior doors, included stair aisles in routes and editor tools, and removed stairs from Out of scope.
+- **Worked:** Yes.
+
+## 11
+- **Asked:** Set stair speed to three-quarters of normal speed.
+- **Changed:** Updated the stair walking speed in spec.md to three-quarters of average level-ground walking speed and logged this request.
+- **Worked:** Yes.
+
+## 12
+- **Asked:** Commit with message "added overview and stage outlines".
+- **Changed:** Committed the pending specification updates and prompt log with the requested message.
+- **Worked:** Yes.
