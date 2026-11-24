@@ -59,3 +59,13 @@
 - **Asked:** Commit with message "added overview and stage outlines".
 - **Changed:** Committed the pending specification updates and prompt log with the requested message.
 - **Worked:** Yes.
+
+## 13
+- **Asked:** Build only Stage 1 from the build stages and commit with "stage 1" as the title.
+- **Changed:** Added a static responsive page-layout mockup for the simplified evacuation app; no simulation logic or later-stage functionality was added. The commit is pending.
+- **Worked:** Yes.
+
+## 14
+- **Asked:** Add the overview to the top of spec.md and add the stages at the end under "## Build stages".
+- **Changed:** Added a concise app overview and a five-stage build plan with checks to spec.md and logged this request.
+- **Worked:** Yes.
